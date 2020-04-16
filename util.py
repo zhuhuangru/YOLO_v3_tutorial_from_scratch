@@ -44,54 +44,54 @@ def bbox_iou(box1, box2):
     
     return iou
 
-def predict_transform(prediction, inp_dim, anchors, num_classes, CUDA = True):
+def predict_transform(prediction, inp_dim, anchors, num_classes, CUDA = True): # 将模型输出结果prediction, 转化为需要的格式
 
     
-    batch_size = prediction.size(0)
-    stride =  inp_dim // prediction.size(2)
-    grid_size = inp_dim // stride
-    bbox_attrs = 5 + num_classes
-    num_anchors = len(anchors)
+    batch_size = prediction.size(0) # 拿到第一维的batch size，这里根据命令行输入的配置进行调整
+    stride =  inp_dim // prediction.size(2) # 第三维数据，13、26、52，计算步长
+    grid_size = inp_dim // stride # 再反过来计算一次，其实就是13、26、52
+    bbox_attrs = 5 + num_classes # 类别数量 + 5 就是每个Anchor Box输出的张量深度
+    num_anchors = len(anchors) # 3
     
-    prediction = prediction.view(batch_size, bbox_attrs*num_anchors, grid_size*grid_size)
-    prediction = prediction.transpose(1,2).contiguous()
-    prediction = prediction.view(batch_size, grid_size*grid_size*num_anchors, bbox_attrs)
-    anchors = [(a[0]/stride, a[1]/stride) for a in anchors]
+    prediction = prediction.view(batch_size, bbox_attrs*num_anchors, grid_size*grid_size) # 改变输入的张量形状，后面的参数是变化后的形状 torch.Size([1, 255, 169]) torch.Size([1, 255, 676]) torch.Size([1, 255, 2704])
+    prediction = prediction.transpose(1,2).contiguous() # 将第2维和第3维交换，然后contiguous返回深度拷贝的张量， torch.Size([1, 169, 255]) torch.Size([1, 676, 255]) torch.Size([1, 2704, 255])
+    prediction = prediction.view(batch_size, grid_size*grid_size*num_anchors, bbox_attrs) # 再来一次转换，torch.Size([1, 507, 85]) torch.Size([1, 2028, 85]) torch.Size([1, 8112, 85])
+    anchors = [(a[0]/stride, a[1]/stride) for a in anchors] # 将anchor 像素级的参数转化为对单个cell的大小参数
 
     #Sigmoid the  centre_X, centre_Y. and object confidencce
-    prediction[:,:,0] = torch.sigmoid(prediction[:,:,0])
-    prediction[:,:,1] = torch.sigmoid(prediction[:,:,1])
-    prediction[:,:,4] = torch.sigmoid(prediction[:,:,4])
+    prediction[:,:,0] = torch.sigmoid(prediction[:,:,0]) # 最后长度85位置的第一位为预测的中心点x，输出范围在0-1之间
+    prediction[:,:,1] = torch.sigmoid(prediction[:,:,1]) # 最后维度85位置的第二位为预测的中心点y，输出范围在0-1之间
+    prediction[:,:,4] = torch.sigmoid(prediction[:,:,4]) # 第五位为object置信度
     
-    #Add the center offsets
-    grid = np.arange(grid_size)
-    a,b = np.meshgrid(grid, grid)
+    #Add the center offsets， 下面这一段是在输出的矩阵上添加偏移
+    grid = np.arange(grid_size) # np.arange 产生一个0-grid_size-1的np数组
+    a,b = np.meshgrid(grid, grid) # 生成2个2维数组，13*13
 
-    x_offset = torch.FloatTensor(a).view(-1,1)
+    x_offset = torch.FloatTensor(a).view(-1,1) # 这里的view相当于reshape，第一个参数-1表示不知道多少维度，第二个参数1表示reshape到1行 torch.Size([169, 1])
     y_offset = torch.FloatTensor(b).view(-1,1)
 
     if CUDA:
-        x_offset = x_offset.cuda()
-        y_offset = y_offset.cuda()
+        x_offset = x_offset.cuda() # torch.Size([169, 1])
+        y_offset = y_offset.cuda() # torch.Size([169, 1])
 
-    x_y_offset = torch.cat((x_offset, y_offset), 1).repeat(1,num_anchors).view(-1,2).unsqueeze(0)
+    x_y_offset = torch.cat((x_offset, y_offset), 1).repeat(1,num_anchors).view(-1,2).unsqueeze(0) # 第一步cat转化为169*2, repeat复制，view(-1,2)第二维度修改为2，torch.Size([507, 2])，unsqueeze增加维度，torch.Size([1, 507, 2])
 
-    prediction[:,:,:2] += x_y_offset
+    prediction[:,:,:2] += x_y_offset # 0，1两个位置加上x_y_offset，这个是矩阵操作，prediction和x_y_offset的维度是一样的；
 
     #log space transform height and the width
-    anchors = torch.FloatTensor(anchors)
+    anchors = torch.FloatTensor(anchors) # 格式应该i还是[(,),(,),(,)]
 
     if CUDA:
         anchors = anchors.cuda()
 
     anchors = anchors.repeat(grid_size*grid_size, 1).unsqueeze(0)
-    prediction[:,:,2:4] = torch.exp(prediction[:,:,2:4])*anchors
+    prediction[:,:,2:4] = torch.exp(prediction[:,:,2:4])*anchors # 2，3位置
     
     prediction[:,:,5: 5 + num_classes] = torch.sigmoid((prediction[:,:, 5 : 5 + num_classes]))
 
     prediction[:,:,:4] *= stride
     
-    return prediction
+    return prediction # 返回修正后的数据
 
 def write_results(prediction, confidence, num_classes, nms_conf = 0.4):
     conf_mask = (prediction[:,:,4] > confidence).float().unsqueeze(2)

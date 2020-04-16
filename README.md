@@ -15,3 +15,5 @@ About when is the training code coming? I have my undergraduate thesis this May,
 
 Cheers
 
+## 关于本项目
+感谢原项目的作者和诸多贡献者。 本项目是在原先作者的基础上进行中文注释的新项目，**没有修改任何实质代码**旨在对YOLO v3推断算法的全面解析，代码量不是非常大，有基础的可以在1周内完全掌握。项目不断更新中。

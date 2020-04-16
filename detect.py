@@ -43,9 +43,9 @@ def arg_parse():
     
     return parser.parse_args()
     
-args = arg_parse()
-images = args.images
-batch_size = int(args.bs)
+args = arg_parse() # 加载调用参数，所有参数都有默认值
+images = args.images # 图像存储的目录
+batch_size = int(args.bs) # batch size，默认为1，在命令行中添加 -bs n 确定batch size大小
 confidence = float(args.confidence)
 nms_thesh = float(args.nms_thresh)
 start = 0
@@ -54,17 +54,17 @@ CUDA = torch.cuda.is_available()
 
 
 num_classes = 80
-classes = load_classes("data/coco.names")
+classes = load_classes("data/coco.names") # 类别数量
 
 
 
 #Set up the neural network
 print("Loading network.....")
-model = Darknet(args.cfgfile)
-model.load_weights(args.weightsfile)
+model = Darknet(args.cfgfile) # 通过cfg配置文件构建Darknet网络
+model.load_weights(args.weightsfile) # 加载权重文件
 print("Network successfully loaded")
 
-model.net_info["height"] = args.reso
+model.net_info["height"] = args.reso # 分辨率，图像高度
 inp_dim = int(model.net_info["height"])
 assert inp_dim % 32 == 0 
 assert inp_dim > 32
@@ -80,18 +80,18 @@ model.eval()
 read_dir = time.time()
 #Detection phase
 try:
-    imlist = [osp.join(osp.realpath('.'), images, img) for img in os.listdir(images)]
+    imlist = [osp.join(osp.realpath('.'), images, img) for img in os.listdir(images)] # 拿到image目录下面所有图片的绝对位置
 except NotADirectoryError:
     imlist = []
     imlist.append(osp.join(osp.realpath('.'), images))
 except FileNotFoundError:
     print ("No file or directory with the name {}".format(images))
     exit()
-    
-if not os.path.exists(args.det):
+
+if not os.path.exists(args.det): # 输出图片目录，如果没有的话，创建新目录
     os.makedirs(args.det)
 
-load_batch = time.time()
+load_batch = time.time() # 记录开始读取读片的时间戳
 loaded_ims = [cv2.imread(x) for x in imlist]
 
 im_batches = list(map(prep_image, loaded_ims, [inp_dim for x in range(len(imlist))]))
