@@ -17,7 +17,7 @@ def unique(tensor):
     return tensor_res
 
 
-def bbox_iou(box1, box2):
+def bbox_iou(box1, box2): # 计算两个框的交并比
     """
     Returns the IoU of two bounding boxes 
     
@@ -93,8 +93,9 @@ def predict_transform(prediction, inp_dim, anchors, num_classes, CUDA = True): #
     
     return prediction # 返回修正后的数据
 
-def write_results(prediction, confidence, num_classes, nms_conf = 0.4):
-    conf_mask = (prediction[:,:,4] > confidence).float().unsqueeze(2)
+def write_results(prediction, confidence, num_classes, nms_conf = 0.4): # 这个函数接上面的模型输出
+    conf_mask = (prediction[:,:,4] > confidence).float().unsqueeze(2) # 从batch*outputchannel*85取出batch*outputchannel*4/85与置信度判断，大于置信度的为1，小于为0. 转化为float之后，再添加一个维度
+    # conf_mask 大小应该是batch * output_channel
     prediction = prediction*conf_mask
     
     box_corner = prediction.new(prediction.shape)
@@ -184,17 +185,17 @@ def write_results(prediction, confidence, num_classes, nms_conf = 0.4):
     except:
         return 0
     
-def letterbox_image(img, inp_dim):
+def letterbox_image(img, inp_dim): # resize图片大小
     '''resize image with unchanged aspect ratio using padding'''
-    img_w, img_h = img.shape[1], img.shape[0]
-    w, h = inp_dim
-    new_w = int(img_w * min(w/img_w, h/img_h))
+    img_w, img_h = img.shape[1], img.shape[0] # 获得当前图片的宽度和高度
+    w, h = inp_dim                            # 网络需要输入图片的高和宽
+    new_w = int(img_w * min(w/img_w, h/img_h))# 找到缩放比例最小的这个，然后按照这个比例进行缩放，就是说如果长比宽大，那么缩放的长就是416，宽另行计算
     new_h = int(img_h * min(w/img_w, h/img_h))
-    resized_image = cv2.resize(img, (new_w,new_h), interpolation = cv2.INTER_CUBIC)
+    resized_image = cv2.resize(img, (new_w,new_h), interpolation = cv2.INTER_CUBIC) # 将图片进行缩放，调整到某一个边是416长度
     
-    canvas = np.full((inp_dim[1], inp_dim[0], 3), 128)
+    canvas = np.full((inp_dim[1], inp_dim[0], 3), 128) # 产生一个416*416*3的矩阵，内部填充128
 
-    canvas[(h-new_h)//2:(h-new_h)//2 + new_h,(w-new_w)//2:(w-new_w)//2 + new_w,  :] = resized_image
+    canvas[(h-new_h)//2:(h-new_h)//2 + new_h,(w-new_w)//2:(w-new_w)//2 + new_w,  :] = resized_image # 将缩放后的图片放入这个np中，上下居中，左右居中；如果是训练的话，对应训练的label也需要进行变换；同时网络预测结果输出后，需要返回到原图中；
     
     return canvas
 
@@ -204,12 +205,12 @@ def prep_image(img, inp_dim):
     
     Returns a Variable 
     """
-    img = (letterbox_image(img, (inp_dim, inp_dim)))
-    img = img[:,:,::-1].transpose((2,0,1)).copy()
-    img = torch.from_numpy(img).float().div(255.0).unsqueeze(0)
+    img = (letterbox_image(img, (inp_dim, inp_dim))) # 这里输出一个inp_dim * inp_dim 大小的图像，图像等比例缩放，两边添加128中间值
+    img = img[:,:,::-1].transpose((2,0,1)).copy() # 转置,将 416 * 416 * 3 转化为 3 * 416 * 416
+    img = torch.from_numpy(img).float().div(255.0).unsqueeze(0) # 图片所有数值/255，在第0维度加上一个维度，成为1*3*416*416
     return img
 
-def load_classes(namesfile):
+def load_classes(namesfile): # 加载检测的类别，使用\n分开，并且去掉最后一个空白行
     fp = open(namesfile, "r")
     names = fp.read().split("\n")[:-1]
     return names

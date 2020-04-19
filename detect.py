@@ -46,15 +46,15 @@ def arg_parse():
 args = arg_parse() # 加载调用参数，所有参数都有默认值
 images = args.images # 图像存储的目录
 batch_size = int(args.bs) # batch size，默认为1，在命令行中添加 -bs n 确定batch size大小
-confidence = float(args.confidence)
-nms_thesh = float(args.nms_thresh)
+confidence = float(args.confidence) # 置信度
+nms_thesh = float(args.nms_thresh) # nms去除重复的限制参数
 start = 0
 CUDA = torch.cuda.is_available()
 
 
 
 num_classes = 80
-classes = load_classes("data/coco.names") # 类别数量
+classes = load_classes("data/coco.names") # 类别，列为list
 
 
 
@@ -65,19 +65,19 @@ model.load_weights(args.weightsfile) # 加载权重文件
 print("Network successfully loaded")
 
 model.net_info["height"] = args.reso # 分辨率，图像高度
-inp_dim = int(model.net_info["height"])
-assert inp_dim % 32 == 0 
-assert inp_dim > 32
+inp_dim = int(model.net_info["height"]) # 配置文件中配置的模型高度，模型可以接受的图像高度，也就是长和宽的分辨率
+assert inp_dim % 32 == 0 # 确保分辨率是32的倍数
+assert inp_dim > 32 # 确保分辨率大于32
 
 #If there's a GPU availible, put the model on GPU
 if CUDA:
-    model.cuda()
+    model.cuda() # 如果系统支持Cuda，将模型放在GPU上
 
 
 #Set the model in evaluation mode
 model.eval()
 
-read_dir = time.time()
+read_dir = time.time() # 保存读取图片目录文件夹的时间
 #Detection phase
 try:
     imlist = [osp.join(osp.realpath('.'), images, img) for img in os.listdir(images)] # 拿到image目录下面所有图片的绝对位置
@@ -92,40 +92,40 @@ if not os.path.exists(args.det): # 输出图片目录，如果没有的话，创
     os.makedirs(args.det)
 
 load_batch = time.time() # 记录开始读取读片的时间戳
-loaded_ims = [cv2.imread(x) for x in imlist]
-
-im_batches = list(map(prep_image, loaded_ims, [inp_dim for x in range(len(imlist))]))
-im_dim_list = [(x.shape[1], x.shape[0]) for x in loaded_ims]
-im_dim_list = torch.FloatTensor(im_dim_list).repeat(1,2)
+loaded_ims = [cv2.imread(x) for x in imlist] # 存储着图片数量*高*宽*通道数量，pics * HxWxC
+# map 函数的第一个参数是调用的函数，这里轮询调用prep_image(loaded_ims[x], inp_dim[x])
+im_batches = list(map(prep_image, loaded_ims, [inp_dim for x in range(len(imlist))])) 
+im_dim_list = [(x.shape[1], x.shape[0]) for x in loaded_ims] # 所有列出照片的（长、高）
+im_dim_list = torch.FloatTensor(im_dim_list).repeat(1,2) # 第一维度不重复，第二维度重复2次，变成了11*4
 
 
 leftover = 0
-if (len(im_dim_list) % batch_size):
+if (len(im_dim_list) % batch_size): # 是否图片数量能够被batch size整除
     leftover = 1
-
-if batch_size != 1:
-    num_batches = len(imlist) // batch_size + leftover            
+if batch_size != 1: # 如果batch_size为1，那么im_batches就不分块了,im_batches为list，内部为1*3*416*416
+    num_batches = len(imlist) // batch_size + leftover        # 计算有多少个batch     
     im_batches = [torch.cat((im_batches[i*batch_size : min((i +  1)*batch_size,
-                        len(im_batches))]))  for i in range(num_batches)]  
-
+                        len(im_batches))]))  for i in range(num_batches)]  # 根据batch size对im_batches进行分块
+    # im_batches 依然为list，但是len数量就是num_batches了，每一个batch内部的第一个维度不在是1，而是batch_size
 write = 0
 
 
 if CUDA:
-    im_dim_list = im_dim_list.cuda()
+    im_dim_list = im_dim_list.cuda() # 将需要检测的数据写入GPU中
     
-start_det_loop = time.time()
-for i, batch in enumerate(im_batches):
+start_det_loop = time.time() # 记录下所有图片组开始预测的时间戳
+for i, batch in enumerate(im_batches): # 加载batch
 #load the image 
-    start = time.time()
+    start = time.time() # 记录单个batch开始运行的时间戳
     if CUDA:
-        batch = batch.cuda()
-    with torch.no_grad():
-        prediction = model(Variable(batch), CUDA)
+        batch = batch.cuda() # 放到GPU中
+    with torch.no_grad(): # 预测阶段，不更新梯度
+        prediction = model(Variable(batch), CUDA) # 第一个参数为forward函数中的x，第二个参数为是否存在CUDA加速
+        # 这里的prediction输出: torch.Size([（batch size）, 10647, 85])
 
     prediction = write_results(prediction, confidence, num_classes, nms_conf = nms_thesh)
 
-    end = time.time()
+    end = time.time() # 记录单个batch结束的时间戳
 
     if type(prediction) == int:
 
